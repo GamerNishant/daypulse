@@ -65,7 +65,7 @@ A 60 s interval in `Signed` runs `reminderDue(settings, lastLogAtToday, localSto
    - `createWindow()` creates a hidden BrowserWindow with `preload.cjs`, `contextIsolation`, `sandbox` and `backgroundThrottling: false` (so sync and state reports keep running in the tray), then loads `web/index.html`.
    - It creates the tray icon and menu (status line, Log progress…, Plan today…, Open, Start at login, Quit).
    - `ready-to-show` → `showCheckin('startup')`.
-   - `powerMonitor` `unlock-screen` / `resume` → `showCheckin()` (10 min cooldown).
+   - `powerMonitor` events. `lock-screen` / `suspend` set `locked = true`. `unlock-screen` clears it and calls `showCheckin()` after 1.5 s. `resume` waits 4 s, re-reads `getSystemIdleState(1) === 'locked'`, then calls `showCheckin()`. `showCheckin()` does nothing while the session is locked and has a 10 min cooldown. While locked, surfacing or focusing the window would steal focus from the Windows sign-in box and leave a blank lock screen, which was the bug fixed in 1.1.1.
    - `setInterval(tickReminder, 30 s)`.
 3. The renderer is the web app. `window.daypulse` comes from [preload.cjs](desktop/preload.cjs), so `platform.ts` sees `desktop` and `deviceKind = 'desktop'`. The web reminder loop and service worker are disabled.
 

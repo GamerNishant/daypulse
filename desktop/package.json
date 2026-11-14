@@ -1,7 +1,7 @@
 {
   "name": "daypulse-desktop",
   "productName": "DayPulse",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "DayPulse for Windows: today's targets at login/unlock and hourly check-in reminders.",
   "author": "Nishant",
   "main": "main.cjs",

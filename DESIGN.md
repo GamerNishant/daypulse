@@ -131,7 +131,7 @@ So a check-in on the phone silences the laptop for the next interval, and vice v
 - *Web*: reminds while the tab or PWA is open and notification permission is granted.
 
 **Unlock / login card**
-- *Desktop*: shown at app start (including Windows login, since the app registers itself as a login item on first run), on `unlock-screen` and on `resume`, at most once every 10 minutes. The window is briefly set always-on-top so it surfaces. **Not now** hides it back to the tray.
+- *Desktop*: shown at app start (including Windows login, since the app registers itself as a login item on first run), on `unlock-screen` and on `resume`, at most once every 10 minutes, and **never while the lock screen is up**. On wake from sleep the PC is usually still locked, so the card waits for the unlock instead of stealing focus from the Windows sign-in box. The window is briefly set always-on-top so it surfaces. **Not now** hides it back to the tray.
 - *Android*: `ACTION_USER_PRESENT` is received by the foreground service (it can't be declared in the manifest). If "Display over other apps" is granted, `CheckInActivity` opens directly. Otherwise a heads-up notification carries the same content. It shows inside active hours (or, when there's no plan yet, any time after 5 AM so the morning unlock prompts a plan), with a per-device cooldown (default 30 min; options: 10 min, 30 min, 60 min or never).
 
 ---

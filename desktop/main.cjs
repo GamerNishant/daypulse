@@ -20,6 +20,9 @@ let rendererReady = false
 let pendingCommand = null
 let lastCheckinShown = 0
 let lastRemindedAt = 0
+// True while Windows shows the lock screen. Surfacing or focusing a window then steals focus from
+// the lock screen's sign-in box, leaving a blank screen until you press Enter a few times.
+let locked = false
 let state = { signedIn: false, hasPlan: false, todayPct: 0, expectedPct: 0, lastLogAt: null, reminderMinutes: 60, activeStart: '08:00', activeEnd: '22:00', goalsText: '' }
 
 // ---- small persisted prefs --------------------------------------------------------------------
@@ -101,7 +104,17 @@ function showWindow(cmd) {
   if (cmd) send(cmd)
 }
 
+function isLocked() {
+  if (locked) return true
+  try {
+    return powerMonitor.getSystemIdleState(1) === 'locked'
+  } catch {
+    return false
+  }
+}
+
 function showCheckin(reason) {
+  if (isLocked()) return // the unlock-screen event will show it once you're at the desktop
   const now = Date.now()
   if (now - lastCheckinShown < CHECKIN_COOLDOWN_MS) return
   lastCheckinShown = now
@@ -201,8 +214,21 @@ if (!app.requestSingleInstanceLock()) {
     // At launch (manual or Windows login): show today's targets.
     win.once('ready-to-show', () => showCheckin('startup'))
 
-    powerMonitor.on('unlock-screen', () => showCheckin('unlock'))
-    powerMonitor.on('resume', () => showCheckin('resume'))
+    // Never touch the window while the lock screen is up. 'resume' fires before you've signed in,
+    // so wait and re-check; when the PC locks on sleep, 'unlock-screen' shows the card instead.
+    powerMonitor.on('lock-screen', () => { locked = true })
+    powerMonitor.on('suspend', () => { locked = true })
+    powerMonitor.on('unlock-screen', () => {
+      locked = false
+      setTimeout(() => showCheckin('unlock'), 1500)
+    })
+    powerMonitor.on('resume', () => {
+      // No lock-screen event arrives on wake if the PC doesn't lock; trust the OS state after a pause.
+      setTimeout(() => {
+        locked = powerMonitor.getSystemIdleState(1) === 'locked'
+        showCheckin('resume')
+      }, 4000)
+    })
 
     setInterval(tickReminder, 30 * 1000)
   })
