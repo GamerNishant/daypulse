@@ -105,6 +105,37 @@ class Repo private constructor(private val ctx: Context) {
         }
     }
 
+    suspend fun requestPasswordReset(email: String): String? = withContext(Dispatchers.IO) {
+        try { Api.recover(email.trim()); null } catch (e: IOException) { if (e is ApiException) e.message else "You appear to be offline." }
+    }
+
+    /**
+     * Finishes a reset from a pasted email link / redirected page address / code, then signs in
+     * with the new password. Returns an error message, or null on success.
+     */
+    suspend fun resetWithLink(link: String, email: String, password: String): String? = withContext(Dispatchers.IO) {
+        val parsed = parseRecoveryInput(link) ?: return@withContext "Paste the whole link from the reset email (or the address of the page it opened)."
+        try {
+            val token = when (parsed) {
+                is RecoveryInput.Error -> return@withContext parsed.message
+                is RecoveryInput.Tokens -> parsed.accessToken
+                is RecoveryInput.TokenHash -> Api.verifyRecovery(parsed.tokenHash, null, null)
+                is RecoveryInput.Code -> Api.verifyRecovery(null, email.trim(), parsed.code)
+            }
+            val accountEmail = try {
+                Api.updatePassword(token, password)
+            } catch (e: ApiException) {
+                if (e.status == 401 || e.status == 403) return@withContext "This reset link has expired or was already used. Send a new one."
+                throw e
+            }
+            signIn(accountEmail.ifEmpty { email.trim() }, password, false)
+        } catch (e: IOException) {
+            val msg = e.message ?: ""
+            if (Regex("expired|invalid|not found", RegexOption.IGNORE_CASE).containsMatchIn(msg)) "This reset link has expired or was already used. Send a new one."
+            else if (e is ApiException) msg else "You appear to be offline."
+        }
+    }
+
     fun signOut() {
         val s = _session.value ?: return
         scope.launch { Api.signOut(s.accessToken) }

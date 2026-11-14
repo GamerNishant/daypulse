@@ -10,7 +10,7 @@ How the code runs, step by step, on each platform. Read [DESIGN.md](DESIGN.md) f
 1. [web/index.html](web/index.html) loads `/src/main.tsx`. Production builds also get the CSP meta tag, which a plugin in [vite.config.ts](web/vite.config.ts) injects.
 2. [main.tsx](web/src/main.tsx) calls `registerServiceWorker()` ([platform.ts](web/src/lib/platform.ts)). It is skipped inside Electron and on `file://`. Then it renders `<App/>`.
 3. `App` ([App.tsx](web/src/App.tsx)) reads the Supabase session (`sb.auth.getSession`) and subscribes to auth changes.
-   - No session: renders `<Auth/>` ([Auth.tsx](web/src/components/Auth.tsx)), which calls `signInWithPassword` or `signUp`. The auth listener then re-renders.
+   - No session: renders `<Auth/>` ([Auth.tsx](web/src/components/Auth.tsx)), which calls `signInWithPassword` or `signUp`. The auth listener then re-renders. For forgotten passwords, see §Password reset below.
    - Session: renders `<Signed userId=…/>` (keyed by user id, so switching accounts resets all state).
 4. `Signed` creates `new Store(userId)` ([store.ts](web/src/lib/store.ts)):
    - The constructor runs `load()`, which reads `localStorage['daypulse-cache-<uid>']` (rows, outbox, syncedAt). If a cache exists, `ready = true` and the UI renders immediately.
@@ -45,6 +45,13 @@ A 60 s interval in `Signed` runs `reminderDue(settings, lastLogAtToday, localSto
 - Sign out: `sb.auth.signOut()` → `App` shows `<Auth/>`, and `Signed` unmounts (`store.stop()` removes listeners and the realtime channel). The cache stays in localStorage for the next sign-in. If writes are still pending, the user confirms first.
 - Network errors never throw into the UI. They set `status = 'offline'` (the red dot in the header), and the outbox keeps the data.
 - Auth errors are mapped to readable text by `errorText()`.
+
+### Password reset (web and desktop)
+`Auth` has four modes: sign in, create, **forgot** and **finish**.
+1. **Forgot password?** → enter email → `requestPasswordReset(email)` ([backend.ts](web/src/lib/backend.ts)) → `sb.auth.resetPasswordForEmail(email, { redirectTo: RESET_REDIRECT })`. `RESET_REDIRECT` is Mind Dump's live `/reset-password` page: it's the same account, and DayPulse has no hosted page yet.
+2. The app switches to **finish**. If the user taps the link in the email, Mind Dump's reset page sets the password, and that password works here too. Otherwise the user pastes the link (or the address of a dead page it opened, or a code) and enters the new password twice.
+3. `resetWithLink(link, email, password)` → `parseRecoveryInput` ([recoveryLink.ts](web/src/lib/recoveryLink.ts), a copy of Mind Dump's, unit tested). Then a **throwaway** client (`persistSession: false`) runs `verifyOtp` / `setSession`, then `updateUser({ password })`. Then the real client calls `signInWithPassword`, so `App`'s listener only ever sees the final session.
+4. Expired or used links show "This reset link has expired or was already used. Send a new one."
 
 ---
 
@@ -90,6 +97,7 @@ Closing the window only hides it. **Quit** (tray) or `before-quit` sets `quittin
 1. `MainActivity.onCreate` → `Repo.get(ctx)` (singleton). Its `init` loads the session from SharedPreferences `daypulse/session` and the cache from `files/cache-<uid>.json`, then emits the first `Snapshot`.
 2. `AppRoot` collects `repo.session` and `repo.snapshot`.
    - No session: `LoginScreen` → `repo.signIn(email, pw, create)` → `Api.signIn`/`Api.signUp` → `saveSession` → `loadCache` → `refresh()`.
+   - Forgot password (`LoginScreen` modes `Forgot`/`Finish`, mirroring the web flow): `repo.requestPasswordReset` → `Api.recover` (`POST /auth/v1/recover?redirect_to=RESET_REDIRECT`). Then `repo.resetWithLink(link, email, pw)` → `parseRecoveryInput` ([RecoveryLink.kt](android/app/src/main/java/com/nishant/daypulse/domain/RecoveryLink.kt), tested by `RecoveryLinkTest`) gives an access token: either directly from a pasted page address, or via `Api.verifyRecovery` (`POST /auth/v1/verify` with `token_hash`, or with `email` + `token`). Then `Api.updatePassword` (`PUT /auth/v1/user`), then the normal `repo.signIn` with the new password. A 401/403 or an "expired/invalid" message becomes "This reset link has expired or was already used."
    - Session: `LaunchedEffect(userId)` starts `PulseService` and asks for `POST_NOTIFICATIONS` once.
 3. `onResume`: `repo.refreshAsync()` (flush, then pull), start the service, and clear any pending reminder notification.
 4. An `open` intent extra (`log` or `plan`) opens the matching bottom sheet once `snap.ready` is true.

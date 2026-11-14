@@ -140,6 +140,7 @@ So a check-in on the phone silences the laptop for the next interval, and vice v
 
 - The Supabase **publishable key** is public by design (it's committed in `web/.env` and `BuildConfig`). All access goes through RLS on `planner_docs`, so a signed-in user can read and write only their own rows. There is no service key anywhere.
 - The web build ships a strict **Content-Security-Policy**: scripts from `'self'` only, and network access to `*.supabase.co` only. Electron uses `contextIsolation` and `sandbox`, with a minimal preload bridge. Navigation away from `file://` and new windows are sent to the system browser.
+- **Password reset** works on every platform without deep links or a hosted DayPulse page. The reset email's link opens Mind Dump's reset page (same Supabase account). Alternatively, the user pastes the link, or a dead page's address, into DayPulse. A throwaway client (web) or direct GoTrue calls (Android) verify it and set the new password, and only then does the app sign in. So a half-reset session never reaches the app, and the flow doesn't depend on the Supabase redirect allowlist. Email delivery still depends on Supabase's mailer, which reaches only team addresses (~2/hour) until custom SMTP is set up. See Mind Dump's README.
 - Android: sessions are stored in app-private SharedPreferences, `allowBackup=false`, and no exported components except the launcher and boot receiver. A revoked refresh token signs you out cleanly.
 - Data is small and bounded: the table's own checks cap each document at 32 KB and each user at 50k rows.
 

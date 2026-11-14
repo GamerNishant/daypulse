@@ -29,6 +29,7 @@ object Api {
     private val base = BuildConfig.SUPABASE_URL
     private val key = BuildConfig.SUPABASE_KEY
     private const val COLS = "id,kind,day,data,updated_at"
+    const val RESET_REDIRECT = "https://gamernishant.github.io/mind-dump/reset-password"
 
     private fun request(method: String, path: String, body: String? = null, token: String? = null, headers: Map<String, String> = emptyMap()): String {
         val c = URL("$base$path").openConnection() as HttpURLConnection
@@ -89,6 +90,29 @@ object Api {
     fun refresh(s: Session): Session {
         val body = buildJsonObject { put("refresh_token", s.refreshToken) }.toString()
         return sessionFrom(request("POST", "/auth/v1/token?grant_type=refresh_token", body), s.email) ?: throw IOException("Session expired.")
+    }
+
+    /** Sends the reset email. Tapping its link opens Mind Dump's reset page (same account). */
+    fun recover(email: String) {
+        val body = buildJsonObject { put("email", email) }.toString()
+        request("POST", "/auth/v1/recover?redirect_to=${URLEncoder.encode(RESET_REDIRECT, "UTF-8")}", body)
+    }
+
+    /** Exchanges a reset link's token hash, or a code + email, for an access token. */
+    fun verifyRecovery(tokenHash: String?, email: String?, code: String?): String {
+        val body = buildJsonObject {
+            put("type", "recovery")
+            if (tokenHash != null) put("token_hash", tokenHash) else { put("email", email); put("token", code) }
+        }.toString()
+        val o = json.parseToJsonElement(request("POST", "/auth/v1/verify", body)).jsonObject
+        return o["access_token"]?.jsonPrimitive?.content ?: throw IOException("This reset link has expired or was already used. Send a new one.")
+    }
+
+    /** Sets a new password for the user behind [token]; returns their email. */
+    fun updatePassword(token: String, password: String): String {
+        val body = buildJsonObject { put("password", password) }.toString()
+        val o = json.parseToJsonElement(request("PUT", "/auth/v1/user", body, token)).jsonObject
+        return o["email"]?.jsonPrimitive?.content ?: ""
     }
 
     fun signOut(token: String) {

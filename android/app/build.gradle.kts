@@ -20,8 +20,8 @@ android {
         applicationId = "com.nishant.daypulse"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         // Public Supabase client config (same values as web/.env; RLS protects the data).
         buildConfigField("String", "SUPABASE_URL", "\"https://bvizicbwmwuorzjgnecq.supabase.co\"")
         buildConfigField("String", "SUPABASE_KEY", "\"sb_publishable_Q2AScSOlIV_AjKXKz0fOMQ_lYQqDW-r\"")

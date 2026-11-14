@@ -1,4 +1,5 @@
 import { createClient, type RealtimeChannel } from '@supabase/supabase-js'
+import { parseRecoveryInput } from './recoveryLink'
 import { ALL_KINDS } from './types'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
@@ -62,4 +63,44 @@ export function errorText(e: unknown): string {
   if (/already registered|already exists/i.test(msg)) return 'An account with this email already exists. Try signing in.'
   if (/rate limit|429/i.test(msg)) return 'Too many attempts. Wait a minute and try again.'
   return msg
+}
+
+/**
+ * Reset emails send the user to Mind Dump's live reset page when they tap the link (same Supabase
+ * account, and DayPulse has no hosted web page yet). The DayPulse apps can also finish the reset
+ * themselves from a pasted link, see resetWithLink.
+ */
+export const RESET_REDIRECT = 'https://gamernishant.github.io/mind-dump/reset-password'
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const { error } = await sb.auth.resetPasswordForEmail(email.trim(), { redirectTo: RESET_REDIRECT })
+  if (error) throw error
+}
+
+/**
+ * Finishes a reset from the pasted email link, the address of the page it opened (even a dead
+ * localhost page), or a numeric code. A throwaway client verifies it and sets the new password,
+ * then the real client signs in with it, so the app never holds a half-reset session.
+ */
+export async function resetWithLink(link: string, email: string, password: string): Promise<void> {
+  const parsed = parseRecoveryInput(link)
+  if (!parsed) throw new Error('Paste the whole link from the reset email (or the address of the page it opened).')
+  if (parsed.kind === 'error') throw new Error(parsed.message)
+  const tmp = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: 'daypulse-recovery' },
+  })
+  const verified =
+    parsed.kind === 'session'
+      ? await tmp.auth.setSession({ access_token: parsed.accessToken, refresh_token: parsed.refreshToken })
+      : parsed.kind === 'code'
+        ? await tmp.auth.verifyOtp({ email: email.trim(), token: parsed.code, type: 'recovery' })
+        : await tmp.auth.verifyOtp({ token_hash: parsed.tokenHash, type: 'recovery' })
+  if (verified.error) {
+    if (/expired|invalid|not found/i.test(verified.error.message)) throw new Error('This reset link has expired or was already used. Send a new one.')
+    throw verified.error
+  }
+  const { data, error } = await tmp.auth.updateUser({ password })
+  if (error) throw error
+  const signIn = await sb.auth.signInWithPassword({ email: data.user.email ?? email.trim(), password })
+  if (signIn.error) throw signIn.error
 }
