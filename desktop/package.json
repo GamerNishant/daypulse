@@ -1,0 +1,26 @@
+{
+  "name": "daypulse-desktop",
+  "productName": "DayPulse",
+  "version": "1.0.0",
+  "description": "DayPulse for Windows: today's targets at login/unlock and hourly check-in reminders.",
+  "author": "Nishant",
+  "main": "main.cjs",
+  "private": true,
+  "scripts": {
+    "web": "npm --prefix ../web run build && node copy-web.cjs",
+    "start": "npm run web && electron .",
+    "dist": "npm run web && electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.nishant.daypulse",
+    "productName": "DayPulse",
+    "files": ["main.cjs", "preload.cjs", "reminder.cjs", "assets/**", "web/**"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": { "target": "nsis", "icon": "build/icon.png", "artifactName": "DayPulse-Setup-${version}.${ext}" },
+    "nsis": { "oneClick": true, "perMachine": false, "runAfterFinish": true, "createDesktopShortcut": true }
+  },
+  "devDependencies": {
+    "electron": "^39.2.0",
+    "electron-builder": "^26.0.12"
+  }
+}
